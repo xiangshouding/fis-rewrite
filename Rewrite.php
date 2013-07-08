@@ -65,6 +65,14 @@ class Rewrite{
         );
     }
 
+    public static function setRoot($root){
+        self::$root = $root;
+    }
+
+    public static function getRoot(){
+        return (self::$root) ? (self::$root) : (dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR);
+    }
+
     private static function padString($str, array $replaceArr) {
         foreach ($replaceArr as $k => $v) {
             $replaceArr['$'.$k] = $v;
@@ -86,17 +94,17 @@ class Rewrite{
      *    false ： 表示没有命中
      */
     public static function match($url, &$matches = null, &$statusCode = null, $exts = null){
+        $root = self::getRoot();
         //命中用户自添加的规则，执行用户自定义的callback处理url
         if(self::$rewriteRules) {
             foreach(self::$rewriteRules as $rule){
                 if(preg_match($rule['rule'], $url, $matches)){
-                    return call_user_func($rule['callback'], $matches);
+                    return call_user_func_array($rule['callback'], array($matches, $root));
                 }
             }
         }
         //命中server.conf文件中定义的rewrite，redirect规则
-        self::$root = dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR;
-        $configFile = self::$root . 'server.conf';
+        $configFile = $root . 'server.conf';
         if(file_exists($configFile) && ($handle = fopen($configFile, 'r'))){
             while (($buffer = fgets($handle)) !== false) {
                 $ruleTokens = preg_split('/\s+/', $buffer);
@@ -106,7 +114,7 @@ class Rewrite{
                         'rewrite' => $ruleTokens[2],
                         'type' => $ruleTokens[0]
                     );
-                    $ret = self::_match($rule, $url, $matches = null, $statusCode = null, $exts = null);
+                    $ret = self::_match($rule, $root, $url, $matches = null, $statusCode = null, $exts = null);
                     if($ret) {
                         fclose($handle);
                         return $ret;
@@ -121,14 +129,14 @@ class Rewrite{
         return false;
     }
 
-    private static function _match($rule, $url, &$matches = null, &$statusCode = null, $exts = null){
+    private static function _match($rule, $root, $url, &$matches = null, &$statusCode = null, $exts = null){
         $statusCode = false;
         if(preg_match('/' . $rule['rule'] . '/', $url, $matches)){
             $m = $matches;
             unset($m[0]);
             $rewrite = self::padString($rule['rewrite'], $m);
             if($rule['type'] == 'rewrite'){
-                if(file_exists(self::$root . $rewrite)){
+                if(file_exists($file = $root . $rewrite)){
                     $pos = strrpos($rewrite, '.');
                     if(false !== $pos){
                         $ext = substr($rewrite, $pos + 1);
@@ -136,12 +144,12 @@ class Rewrite{
                             $statusCode = 304;
                         }else if($ext == 'php'){
                             $statusCode = 200;
-                            self::includePhp(self::$root . $rewrite, $matches);
+                            self::includePhp($root . $rewrite, $matches);
                         }else if(self::$MIME[$ext]){
-                            $content_type = 'Content-Type: ' . $MIME[$ext];
+                            $content_type = 'Content-Type: ' . self::$MIME[$ext];
                             header($content_type);
                             $statusCode = 200;
-                            echo file_get_contents(self::$root . $rewrite);
+                            echo file_get_contents($root . $rewrite);
                         }else{
                             $statusCode = 200;
                             $content_type = 'Content-Type: application/x-' . $ext;
