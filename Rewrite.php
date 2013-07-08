@@ -5,62 +5,60 @@ class Rewrite{
     private static $root = null;
     private static $rewriteRules = array();
     private static $MIME = array(
-                    'bmp' => 'image/bmp',
-                    'css' => 'text/css',
-                    'doc' => 'application/msword',
-                    'dtd' => 'text/xml',
-                    'gif' => 'image/gif',
-                    'hta' => 'application/hta',
-                    'htc' => 'text/x-component',
-                    'htm' => 'text/html',
-                    'html' => 'text/html',
-                    'xhtml' => 'text/html',
-                    'ico' => 'image/x-icon',
-                    'jpe' => 'image/jpeg',
-                    'jpeg' => 'image/jpeg',
-                    'jpg' => 'image/jpeg',
-                    'js' => 'text/javascript',
-                    'json' => 'application/json',
-                    'mocha' => 'text/javascript',
-                    'mp3' => 'audio/mp3',
-                    'mp4' => 'video/mpeg4',
-                    'mpeg' => 'video/mpg',
-                    'mpg' => 'video/mpg',
-                    'manifest' => 'text/cache-manifest',
-                    'pdf' => 'application/pdf',
-                    'png' => 'image/png',
-                    'ppt' => 'application/vnd.ms-powerpoint',
-                    'rmvb' => 'application/vnd.rn-realmedia-vbr',
-                    'rm' => 'application/vnd.rn-realmedia',
-                    'rtf' => 'application/msword',
-                    'svg' => 'image/svg+xml',
-                    'swf' => 'application/x-shockwave-flash',
-                    'tif' => 'image/tiff',
-                    'tiff' => 'image/tiff',
-                    'txt' => 'text/plain',
-                    'vml' => 'text/xml',
-                    'vxml' => 'text/xml',
-                    'wav' => 'audio/wav',
-                    'wma' => 'audio/x-ms-wma',
-                    'wmv' => 'video/x-ms-wmv',
-                    'woff' => 'image/woff',
-                    'xml' => 'text/xml',
-                    'xls' => 'application/vnd.ms-excel',
-                    'xq' => 'text/xml',
-                    'xql' => 'text/xml',
-                    'xquery' => 'text/xml',
-                    'xsd' => 'text/xml',
-                    'xsl' => 'text/xml',
-                    'xslt' => 'text/xml'
-                );
+        'bmp' => 'image/bmp',
+        'css' => 'text/css',
+        'doc' => 'application/msword',
+        'dtd' => 'text/xml',
+        'gif' => 'image/gif',
+        'hta' => 'application/hta',
+        'htc' => 'text/x-component',
+        'htm' => 'text/html',
+        'html' => 'text/html',
+        'xhtml' => 'text/html',
+        'ico' => 'image/x-icon',
+        'jpe' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'jpg' => 'image/jpeg',
+        'js' => 'text/javascript',
+        'json' => 'application/json',
+        'mocha' => 'text/javascript',
+        'mp3' => 'audio/mp3',
+        'mp4' => 'video/mpeg4',
+        'mpeg' => 'video/mpg',
+        'mpg' => 'video/mpg',
+        'manifest' => 'text/cache-manifest',
+        'pdf' => 'application/pdf',
+        'png' => 'image/png',
+        'ppt' => 'application/vnd.ms-powerpoint',
+        'rmvb' => 'application/vnd.rn-realmedia-vbr',
+        'rm' => 'application/vnd.rn-realmedia',
+        'rtf' => 'application/msword',
+        'svg' => 'image/svg+xml',
+        'swf' => 'application/x-shockwave-flash',
+        'tif' => 'image/tiff',
+        'tiff' => 'image/tiff',
+        'txt' => 'text/plain',
+        'vml' => 'text/xml',
+        'vxml' => 'text/xml',
+        'wav' => 'audio/wav',
+        'wma' => 'audio/x-ms-wma',
+        'wmv' => 'video/x-ms-wmv',
+        'woff' => 'image/woff',
+        'xml' => 'text/xml',
+        'xls' => 'application/vnd.ms-excel',
+        'xq' => 'text/xml',
+        'xql' => 'text/xml',
+        'xquery' => 'text/xml',
+        'xsd' => 'text/xml',
+        'xsl' => 'text/xml',
+        'xslt' => 'text/xml'
+    );
 
     private static function initRewriteConf(){
         self::$root = dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR;
         $configFile = self::$root . 'server.conf';
-        if(file_exists($configFile)){
-            $configContent = file_get_contents($configFile);
-            $rules = preg_split('/\r?\n/', $configContent);
-            foreach($rules as $rule){
+        if(file_exists($configFile) && ($handle = fopen($configFile, 'r'))){
+            while (($rule = fgets($handle)) !== false) {
                 $ruleTokens = preg_split('/\s+/', $rule);
                 if($ruleTokens[0] == 'rewrite' || $ruleTokens[0] == 'redirect'){
                     self::$rewriteRules[] = array(
@@ -70,6 +68,10 @@ class Rewrite{
                     );
                 }
             }
+            if (!feof($handle)) {
+                echo "Error: unexpected fgets() fail\n";
+            }
+            fclose($handle);
         }
     }
 
@@ -103,11 +105,11 @@ class Rewrite{
     public static function match($url, &$matches = null, &$statusCode = null, $exts = null){
         self::initRewriteConf();
         $statusCode = false;
-        foreach(self::$rewriteRules as $rules){
-            if(preg_match('/' . $rules['rule'] . '/', $url, $matches)){
+        foreach(self::$rewriteRules as $rule){
+            if(preg_match('/' . $rule['rule'] . '/', $url, $matches)){
                 $m = $matches;
                 unset($m[0]);
-                $rewrite = self::padString($rules['rewrite'], $m);
+                $rewrite = self::padString($rule['rewrite'], $m);
                 if($rule['type'] == 'rewrite'){
                     if(file_exists(self::$root . $rewrite)){
                         $pos = strrpos($rewrite, '.');
@@ -133,10 +135,10 @@ class Rewrite{
                     } else {
                         $statusCode = 404;
                     }
-                }else if($rule['type'] == 'redirect'){
-                        $statusCode = 302;
-                        header('Location: ' . $rewrite);
-                        exit();
+                } else if($rule['type'] == 'redirect'){
+                    $statusCode = 302;
+                    header('Location: ' . $rewrite);
+                    exit();
                 }
                 return $statusCode;
             }
