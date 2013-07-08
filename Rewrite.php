@@ -3,7 +3,6 @@
 class Rewrite{
 
     private static $root = null;
-    private static $rewriteRules = array();
     private static $MIME = array(
         'bmp' => 'image/bmp',
         'css' => 'text/css',
@@ -54,27 +53,6 @@ class Rewrite{
         'xslt' => 'text/xml'
     );
 
-    private static function initRewriteConf(){
-        self::$root = dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR;
-        $configFile = self::$root . 'server.conf';
-        if(file_exists($configFile) && ($handle = fopen($configFile, 'r'))){
-            while (($rule = fgets($handle)) !== false) {
-                $ruleTokens = preg_split('/\s+/', $rule);
-                if($ruleTokens[0] == 'rewrite' || $ruleTokens[0] == 'redirect'){
-                    self::$rewriteRules[] = array(
-                        'rule' => $ruleTokens[1],
-                        'rewrite' => $ruleTokens[2],
-                        'type' => $ruleTokens[0]
-                    );
-                }
-            }
-            if (!feof($handle)) {
-                echo "Error: unexpected fgets() fail\n";
-            }
-            fclose($handle);
-        }
-    }
-
     public static function addRewriteRule($reg, $rewrite){
         self::$rewriteRules[] = array(
             'rule' => $reg,
@@ -103,45 +81,70 @@ class Rewrite{
      *    false ： 表示没有命中
      */
     public static function match($url, &$matches = null, &$statusCode = null, $exts = null){
-        self::initRewriteConf();
-        $statusCode = false;
-        foreach(self::$rewriteRules as $rule){
-            if(preg_match('/' . $rule['rule'] . '/', $url, $matches)){
-                $m = $matches;
-                unset($m[0]);
-                $rewrite = self::padString($rule['rewrite'], $m);
-                if($rule['type'] == 'rewrite'){
-                    if(file_exists(self::$root . $rewrite)){
-                        $pos = strrpos($rewrite, '.');
-                        if(false !== $pos){
-                            $ext = substr($rewrite, $pos + 1);
-                            if(in_array($ext, $exts)){
-                                $statusCode = 304;
-                            }else if($ext == 'php'){
-                                $statusCode = 200;
-                                self::includePhp(self::$root . $rewrite, $matches);
-                            }else if(self::$MIME[$ext]){
-                                $content_type = 'Content-Type: ' . $MIME[$ext];
-                                header($content_type);
-                                $statusCode = 200;
-                                echo file_get_contents(self::$root . $rewrite);
-                            }else{
-                                $statusCode = 200;
-                                $content_type = 'Content-Type: application/x-' . $ext;
-                                header($content_type);
-                                echo file_get_contents($file);
-                            }
-                        }
+        self::$root = dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR;
+        $configFile = self::$root . 'server.conf';
+        if(file_exists($configFile) && ($handle = fopen($configFile, 'r'))){
+            while (($buffer = fgets($handle)) !== false) {
+                $ruleTokens = preg_split('/\s+/', $buffer);
+                if($ruleTokens[0] == 'rewrite' || $ruleTokens[0] == 'redirect'){
+                    $rule = array(
+                        'rule' => $ruleTokens[1],
+                        'rewrite' => $ruleTokens[2],
+                        'type' => $ruleTokens[0]
+                    );
+                    $ret = self::_match($rule, $url, $matches = null, $statusCode = null, $exts = null);
+                    if($ret) {
+                        return $ret;
                     } else {
-                        $statusCode = 404;
+                        continue;
                     }
-                } else if($rule['type'] == 'redirect'){
-                    $statusCode = 302;
-                    header('Location: ' . $rewrite);
-                    exit();
                 }
-                return $statusCode;
             }
+            if (!feof($handle)) {
+                echo "Error: unexpected fgets() fail\n";
+            }
+            fclose($handle);
+            return false;
+        }
+    }
+
+    private static function _match($rule, $url, &$matches = null, &$statusCode = null, $exts = null){
+        $statusCode = false;
+        if(preg_match('/' . $rule['rule'] . '/', $url, $matches)){
+            $m = $matches;
+            unset($m[0]);
+            $rewrite = self::padString($rule['rewrite'], $m);
+            if($rule['type'] == 'rewrite'){
+                if(file_exists(self::$root . $rewrite)){
+                    $pos = strrpos($rewrite, '.');
+                    if(false !== $pos){
+                        $ext = substr($rewrite, $pos + 1);
+                        if(in_array($ext, $exts)){
+                            $statusCode = 304;
+                        }else if($ext == 'php'){
+                            $statusCode = 200;
+                            self::includePhp(self::$root . $rewrite, $matches);
+                        }else if(self::$MIME[$ext]){
+                            $content_type = 'Content-Type: ' . $MIME[$ext];
+                            header($content_type);
+                            $statusCode = 200;
+                            echo file_get_contents(self::$root . $rewrite);
+                        }else{
+                            $statusCode = 200;
+                            $content_type = 'Content-Type: application/x-' . $ext;
+                            header($content_type);
+                            echo file_get_contents($file);
+                        }
+                    }
+                } else {
+                    $statusCode = 404;
+                }
+            } else if($rule['type'] == 'redirect'){
+                $statusCode = 302;
+                header('Location: ' . $rewrite);
+                exit();
+            }
+            return $statusCode;
         }
         return false;
     }
