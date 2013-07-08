@@ -3,6 +3,7 @@
 class Rewrite{
 
     private static $root = null;
+    private static $rewriteRules = array();
     private static $MIME = array(
         'bmp' => 'image/bmp',
         'css' => 'text/css',
@@ -52,11 +53,15 @@ class Rewrite{
         'xsl' => 'text/xml',
         'xslt' => 'text/xml'
     );
-
-    public static function addRewriteRule($reg, $rewrite){
+    /**
+     * 添加用户自定义的url处理规则
+     * @param $reg 正则，需要加定界符
+     * @param callable $callback  匹配$reg后，用户处理callback函数，callback参数为匹配的$matches数组
+     */
+    public static function addRewriteRule($reg, callable $callback){
         self::$rewriteRules[] = array(
             'rule' => $reg,
-            'rewrite' => $rewrite
+            'callback' => $callback
         );
     }
 
@@ -81,6 +86,16 @@ class Rewrite{
      *    false ： 表示没有命中
      */
     public static function match($url, &$matches = null, &$statusCode = null, $exts = null){
+        //命中用户自添加的规则，执行用户自定义的callback处理url
+        if(self::$rewriteRules) {
+            foreach(self::$rewriteRules as $rule){
+                if(preg_match($rule['rule'], $url, $matches)){
+                    call_user_func($rule['callback'], $matches);
+                    return ($statusCode = 200);
+                }
+            }
+        }
+        //命中server.conf文件中定义的rewrite，redirect规则
         self::$root = dirname(dirname(__FILE__)) . DIRECTORY_SEPARATOR;
         $configFile = self::$root . 'server.conf';
         if(file_exists($configFile) && ($handle = fopen($configFile, 'r'))){
@@ -94,9 +109,8 @@ class Rewrite{
                     );
                     $ret = self::_match($rule, $url, $matches = null, $statusCode = null, $exts = null);
                     if($ret) {
+                        fclose($handle);
                         return $ret;
-                    } else {
-                        continue;
                     }
                 }
             }
@@ -104,8 +118,8 @@ class Rewrite{
                 echo "Error: unexpected fgets() fail\n";
             }
             fclose($handle);
-            return false;
         }
+        return false;
     }
 
     private static function _match($rule, $url, &$matches = null, &$statusCode = null, $exts = null){
