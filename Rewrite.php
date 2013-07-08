@@ -90,8 +90,7 @@ class Rewrite{
         if(self::$rewriteRules) {
             foreach(self::$rewriteRules as $rule){
                 if(preg_match($rule['rule'], $url, $matches)){
-                    call_user_func($rule['callback'], $matches);
-                    return ($statusCode = 200);
+                    return call_user_func($rule['callback'], $matches);
                 }
             }
         }
